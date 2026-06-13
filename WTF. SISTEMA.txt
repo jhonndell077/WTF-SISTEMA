@@ -18,6 +18,7 @@ function onOpen() {
     .addItem("Quitar protecciones detectadas", "QuitarProteccionesSistema")
     .addSeparator()
     .addItem("Registrar decomiso MISE AN PLACE", "AbrirDecomisoMiseAnPlace")
+    .addItem("Cierre Diario MISE AN PLACE", "AbrirCierreDiarioMiseAnPlace")
     .addSeparator()
     .addItem("Diagnosticar botones", "DiagnosticarBotonesSistema")
     .addItem("Limpiar filas vacias de Inventario", "LimpiarFilasVaciasInventario")
@@ -2188,4 +2189,124 @@ function RegistrarSalidaRapidaMiseAnPlace(items) {
     ok: true,
     mensaje: "Salida rapida registrada correctamente.\n\nProductos actualizados: " + Object.keys(acumulados).length
   };
+}
+
+// ===================================
+// CIERRE DIARIO MISE AN PLACE
+// ===================================
+
+function AbrirCierreDiarioMiseAnPlace() {
+  var productos = ObtenerProductosCierreDiarioMiseAnPlace();
+
+  if (productos.length === 0) {
+    SpreadsheetApp.getUi().alert(
+      "Cierre Diario",
+      "No hay productos registrados en MISE AN PLACE.",
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+    return;
+  }
+
+  var ahora = new Date();
+  var meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  var fecha = ahora.getDate() + " de " + meses[ahora.getMonth()] + " de " + ahora.getFullYear();
+  var h = ahora.getHours();
+  var m = String(ahora.getMinutes()).padStart(2, "0");
+  var ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  var hora = h + ":" + m + " " + ampm;
+
+  var lineas = ["*CIERRE DIARIO - MISE EN PLACE*", fecha, hora, ""];
+
+  productos.forEach(function (item) {
+    var cantidad = item.cantidad % 1 === 0 ? String(Math.round(item.cantidad)) : String(item.cantidad);
+    var linea = "• " + item.producto + ": " + cantidad;
+    if (item.medida) {
+      linea += " " + item.medida;
+    }
+    lineas.push(linea);
+  });
+
+  lineas.push("");
+  lineas.push("Cierre registrado por WTF Sistema");
+
+  var mensaje = lineas.join("\n");
+  var url = "https://wa.me/18293666947?text=" + encodeURIComponent(mensaje);
+
+  var html = HtmlService.createHtmlOutput(getHtmlCierreDiarioMiseAnPlace(url))
+    .setWidth(400)
+    .setHeight(170);
+
+  SpreadsheetApp.getUi().showModalDialog(html, "Cierre Diario MISE AN PLACE");
+}
+
+function ObtenerProductosCierreDiarioMiseAnPlace() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hoja = ss.getSheetByName("MISE AN PLACE");
+
+  if (!hoja) {
+    throw new Error('La hoja "MISE AN PLACE" no existe.');
+  }
+
+  var ultimaFila = hoja.getLastRow();
+
+  if (ultimaFila < 5) {
+    return [];
+  }
+
+  var datos = hoja.getRange(5, 2, ultimaFila - 4, 2).getValues();
+
+  var mapaUnidades = {};
+  var hojaProductos = ss.getSheetByName("_PRODUCTOS_INVENTARIO");
+  if (hojaProductos && hojaProductos.getLastRow() > 1) {
+    var datosUnidades = hojaProductos.getRange(2, 1, hojaProductos.getLastRow() - 1, 2).getValues();
+    datosUnidades.forEach(function (fila) {
+      var nombre = String(fila[0] || "").trim();
+      var medida = String(fila[1] || "").trim();
+      if (nombre) {
+        mapaUnidades[NormalizarTexto_(nombre)] = medida;
+      }
+    });
+  }
+
+  var productos = [];
+
+  for (var i = 0; i < datos.length; i++) {
+    var producto = String(datos[i][0] || "").trim();
+    var cantidad = parseFloat(datos[i][1]);
+
+    if (producto !== "") {
+      var medida = mapaUnidades[NormalizarTexto_(producto)] || "";
+      productos.push({
+        producto: producto,
+        cantidad: isNaN(cantidad) ? 0 : cantidad,
+        medida: medida
+      });
+    }
+  }
+
+  return productos;
+}
+
+function getHtmlCierreDiarioMiseAnPlace(url) {
+  var urlSegura = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  return '<!DOCTYPE html>\n' +
+    '<html>\n' +
+    '  <head>\n' +
+    '    <base target="_top">\n' +
+    '    <style>\n' +
+    '      body{font-family:Arial,sans-serif;padding:28px 24px;background:#f7f7f7;text-align:center;}\n' +
+    '      p{font-size:14px;color:#333;margin:0 0 18px;line-height:1.5;}\n' +
+    '      a{display:inline-block;background:#25d366;color:#fff;padding:12px 28px;\n' +
+    '        border-radius:6px;font-weight:bold;font-size:15px;text-decoration:none;}\n' +
+    '    </style>\n' +
+    '  </head>\n' +
+    '  <body>\n' +
+    '    <p>El cierre esta listo.<br>Haga clic para enviarlo por WhatsApp:</p>\n' +
+    '    <a href="' + urlSegura + '" target="_blank"\n' +
+    '       onclick="setTimeout(function(){google.script.host.close();},800);">\n' +
+    '      Enviar Cierre por WhatsApp\n' +
+    '    </a>\n' +
+    '  </body>\n' +
+    '</html>';
 }
